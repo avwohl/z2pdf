@@ -1,0 +1,17 @@
+Recent projects involve infocom style zil and zilf compiled to .z
+For the compiler we wrote see ~/zorkie
+The .z can then be compiled to javascript see ~/z2js (in progress).
+The above projects have documentation on the formats of .z files V1-V8.
+I will need to play thru a bunch of games to debug.
+Make a z2pdf debugging tool. It should print useful info from
+the .z file.  I think all .z games have rooms (or maybe called locations)
+and the player  can move around with direction commands north, east etc.
+See if it is possible to draw map with a box with the name of each room.
+Lines should connect each room to the rooms a user can move to labeled
+with the direction.
+The bigger games will take multiple pages to print.  If a line goes off thec
+current page it can be labeled with the name of the room it goes to.
+
+Also print all the input vocabulary.
+Also print names of the takable objects (things to pick up).
+
