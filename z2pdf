@@ -7,7 +7,7 @@ Extracts and visualizes information from Z-machine game files:
 - Input vocabulary
 - Takable objects
 
-Usage: python3 z2pdf.py <input.z3> [output.pdf]
+Usage: python3 z2pdf <input.z3> [output.pdf]
 """
 
 import sys
