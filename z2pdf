@@ -13,6 +13,7 @@ Usage: python3 z2pdf.py <input.z3> [output.pdf]
 import sys
 import os
 import struct
+import re
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 from dataclasses import dataclass
@@ -156,20 +157,51 @@ class ZMapExtractor:
 
     def _find_rooms(self):
         """Identify room objects in the game"""
-        # In Zork games, rooms typically start around object 140-150
-        # Objects before that are items, scenery, etc.
-        # We use a simple heuristic: rooms start at object 142
-        # (based on empirical observation of Zork game files)
+        # Better approach: rooms typically share a common parent object (ROOMS container)
+        # Find the most common parent among objects with multiple properties
+
+        from collections import Counter
 
         max_obj = 255 if self.parser.header.version <= 3 else 2000
-        room_start = 142  # Standard for Zork games
 
-        # Collect all objects from room_start onwards as rooms
-        for obj_num in range(room_start, min(max_obj, 300)):
+        # First pass: find objects that look like rooms (have multiple properties)
+        # and count their parents
+        parent_counts = Counter()
+        candidates = []
+
+        for obj_num in range(1, min(max_obj, 256)):
             try:
                 obj = self.parser.get_object(obj_num)
                 if not obj:
-                    break
+                    continue
+
+                name = self.parser.get_object_name(obj_num)
+                if not name or not name.strip():
+                    continue
+
+                if not self._is_valid_name(name):
+                    continue
+
+                # Check if this object has properties that might be exits
+                if self._has_exit_properties(obj_num):
+                    parent_counts[obj.parent] += 1
+                    candidates.append((obj_num, obj.parent, name))
+
+            except (IndexError, struct.error):
+                continue
+
+        # The most common parent is likely the ROOMS container
+        if parent_counts:
+            rooms_container = parent_counts.most_common(1)[0][0]
+        else:
+            rooms_container = 27  # Fallback
+
+        # Second pass: collect all objects with that parent
+        for obj_num in range(1, min(max_obj, 256)):
+            try:
+                obj = self.parser.get_object(obj_num)
+                if not obj or obj.parent != rooms_container:
+                    continue
 
                 name = self.parser.get_object_name(obj_num)
                 if not name or not name.strip():
@@ -185,6 +217,32 @@ class ZMapExtractor:
                 )
             except (IndexError, struct.error):
                 continue
+
+        # If we found few rooms, fall back to the old heuristic
+        if len(self.rooms) < 10:
+            room_start = 142
+            for obj_num in range(room_start, min(max_obj, 300)):
+                if obj_num in self.rooms:
+                    continue
+                try:
+                    obj = self.parser.get_object(obj_num)
+                    if not obj:
+                        break
+
+                    name = self.parser.get_object_name(obj_num)
+                    if not name or not name.strip():
+                        continue
+
+                    if not self._is_valid_name(name):
+                        continue
+
+                    self.rooms[obj_num] = Room(
+                        obj_num=obj_num,
+                        name=name,
+                        exits={}
+                    )
+                except (IndexError, struct.error):
+                    continue
 
     def _get_directional_properties(self, obj_num: int) -> Dict[int, int]:
         """Get directional properties (1-12) for an object"""
@@ -434,6 +492,207 @@ class ZMapExtractor:
             9: 'up', 10: 'down', 11: 'in', 12: 'out'
         }
         return direction_map.get(prop_num)
+
+
+class StaticExitExtractor:
+    """
+    Extract room exits using static analysis of Z-machine bytecode.
+
+    This works in two modes:
+    1. For games with extended dictionary entries (Infocom): analyze dictionary
+       extra bytes to map words to property numbers
+    2. For all games: scan room properties for single-byte values that point
+       to other room objects (these are exits)
+
+    NO hardcoded direction lists or property mappings - everything is discovered
+    dynamically from the game data.
+    """
+
+    def __init__(self, data: bytes, parser: ZParser):
+        self.data = data
+        self.parser = parser
+        self.room_objs = set()  # Will be populated with room object numbers
+
+    def _get_object_properties(self, obj_num: int) -> Dict[int, List[int]]:
+        """Get all properties for an object."""
+        props = {}
+        try:
+            obj = self.parser.get_object(obj_num)
+            if not obj:
+                return props
+
+            prop_addr = obj.properties
+            if prop_addr >= len(self.data):
+                return props
+
+            text_length = self.data[prop_addr]
+            prop_addr += 1 + text_length * 2
+
+            while prop_addr < len(self.data) - 10:
+                size_byte = self.data[prop_addr]
+                if size_byte == 0:
+                    break
+                prop_num = size_byte & 0x1F
+                prop_size = (size_byte >> 5) + 1
+                prop_data = list(self.data[prop_addr + 1:prop_addr + 1 + prop_size])
+                props[prop_num] = prop_data
+                prop_addr += 1 + prop_size
+        except:
+            pass
+        return props
+
+    def _get_property_to_word_mapping(self) -> Dict[int, str]:
+        """
+        Extract property number -> word mapping from dictionary.
+
+        In Z-machine games with extended dictionary entries (7+ bytes),
+        the extra bytes contain property numbers that map words to directions.
+        """
+        prop_to_word = {}
+
+        dict_addr = self.parser.header.dictionary
+        num_seps = self.data[dict_addr]
+        dict_addr += 1 + num_seps
+
+        entry_length = self.data[dict_addr]
+        num_entries = (self.data[dict_addr + 1] << 8) | self.data[dict_addr + 2]
+        dict_addr += 3
+
+        # Only works for games with extended dictionary entries (>4 bytes)
+        if entry_length <= 4:
+            return prop_to_word
+
+        words = self.parser.get_dictionary_words()
+
+        for i, word in enumerate(words):
+            word = word.strip().lower()
+            addr = dict_addr + i * entry_length
+            # In V3: 4 bytes of encoded text, then extra bytes
+            extra = list(self.data[addr + 4:addr + entry_length])
+
+            # Check each byte as potential property number
+            for potential_prop in extra:
+                if 1 <= potential_prop <= 31:
+                    # Only use the first word for each property
+                    if potential_prop not in prop_to_word:
+                        prop_to_word[potential_prop] = word
+
+        return prop_to_word
+
+    def _find_exit_properties(self, rooms: Dict[int, 'Room']) -> Set[int]:
+        """
+        Find which property numbers are used for exits.
+
+        Direction/exit properties are typically in the range 13-31.
+        Lower properties (1-12) are usually for other purposes like
+        synonyms, descriptions, actions, etc.
+
+        For Infocom games: exits are single-byte properties.
+        For ZILF games: exits may be embedded in multi-byte properties.
+        """
+        exit_props = set()
+
+        for room_num in rooms:
+            props = self._get_object_properties(room_num)
+            for prop_num, prop_data in props.items():
+                # Only consider properties 13-31 (typical exit range)
+                if prop_num < 13:
+                    continue
+
+                # Check if any byte in the property data points to a room
+                for byte_val in prop_data:
+                    if byte_val in self.room_objs and byte_val != room_num:
+                        exit_props.add(prop_num)
+                        break
+
+        return exit_props
+
+    def _extract_room_refs_from_property(self, prop_data: List[int],
+                                         room_num: int) -> List[int]:
+        """
+        Extract room references from property data.
+
+        For single-byte properties, the whole value is the destination.
+        For multi-byte properties, scan for bytes that are valid room numbers.
+        """
+        refs = []
+        if len(prop_data) == 1:
+            # Simple exit - single byte is destination
+            if prop_data[0] in self.room_objs and prop_data[0] != room_num:
+                refs.append(prop_data[0])
+        else:
+            # Multi-byte property - look for room refs at any position
+            # Prefer unique references (don't duplicate same destination)
+            seen = set()
+            for byte_val in prop_data:
+                if byte_val in self.room_objs and byte_val != room_num:
+                    if byte_val not in seen:
+                        refs.append(byte_val)
+                        seen.add(byte_val)
+        return refs
+
+    def extract_exits(self, rooms: Dict[int, 'Room']) -> int:
+        """
+        Extract exits for all rooms using static analysis.
+
+        This scans room properties to find values pointing to other rooms
+        (which are exits), then maps them to dictionary words where possible.
+
+        Works with both Infocom (single-byte exits) and ZILF (multi-byte
+        exit tables) game formats.
+
+        Returns: total number of exits found
+        """
+        self.room_objs = set(rooms.keys())
+
+        if not self.room_objs:
+            print("No rooms found to analyze")
+            return 0
+
+        # Step 1: Find which property numbers are used for exits
+        exit_props = self._find_exit_properties(rooms)
+        if not exit_props:
+            print("No exit properties found")
+            return 0
+
+        print(f"Found exit property numbers: {sorted(exit_props)}")
+
+        # Step 2: Try to map property numbers to dictionary words
+        prop_to_word = self._get_property_to_word_mapping()
+
+        # Filter to only properties that are actually used as exits
+        prop_to_word = {p: w for p, w in prop_to_word.items() if p in exit_props}
+
+        if prop_to_word:
+            print(f"Mapped {len(prop_to_word)} properties to words: {prop_to_word}")
+        else:
+            print("No property-to-word mapping found in dictionary")
+
+        # Step 3: Extract exits from each room
+        total_exits = 0
+        words_used = set()
+
+        for room_num, room in rooms.items():
+            props = self._get_object_properties(room_num)
+
+            for prop_num in exit_props:
+                if prop_num in props:
+                    prop_data = props[prop_num]
+                    # Extract room references from property data
+                    dest_rooms = self._extract_room_refs_from_property(
+                        prop_data, room_num)
+
+                    for dest in dest_rooms:
+                        # Use dictionary word if known, else use property number
+                        word = prop_to_word.get(prop_num, f"p{prop_num}")
+                        if word not in room.exits:
+                            room.exits[word] = dest
+                            total_exits += 1
+                            words_used.add(word)
+                            break  # Only one exit per property/direction
+
+        print(f"Unique exit words found: {sorted(words_used)}")
+        return total_exits
 
 
 class MapLayoutEngine:
@@ -711,9 +970,15 @@ def main():
     print(f"Z-Machine version {parser.header.version}")
     print(f"Release {parser.header.release}, Serial {parser.header.serial}")
 
-    # Extract map data
+    # Extract map data (rooms and objects)
     extractor = ZMapExtractor(parser)
     extractor.extract_all()
+
+    # Extract exits using static analysis (no dfrotz required)
+    print("\nExtracting exits using static dictionary analysis...")
+    exit_extractor = StaticExitExtractor(data, parser)
+    total_exits = exit_extractor.extract_exits(extractor.rooms)
+    print(f"Extracted {total_exits} exits from {len(extractor.rooms)} rooms")
 
     # Layout rooms
     layout_engine = MapLayoutEngine(extractor.rooms)
