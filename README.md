@@ -30,20 +30,20 @@ The tool also depends on the Z-machine parser from the z2js project at `~/z2js/z
 Basic usage:
 
 ```bash
-python3 z2pdf.py <input.z3> [output.pdf]
+python3 z2pdf <input.z3> [output.pdf]
 ```
 
 Examples:
 
 ```bash
 # Generate map for minizork
-python3 z2pdf.py minizork.z3
+python3 z2pdf minizork.z3
 
 # Specify output filename
-python3 z2pdf.py zork1.z3 zork1-map.pdf
+python3 z2pdf zork1.z3 zork1-map.pdf
 
 # Process any Z-machine version
-python3 z2pdf.py game.z5 game-map.pdf
+python3 z2pdf game.z5 game-map.pdf
 ```
 
 ## Output
@@ -106,15 +106,15 @@ Generate maps for sample games:
 
 ```bash
 # Minizork - small test game
-python3 z2pdf.py ~/z2js/docs/minizork.z3
+python3 z2pdf ~/z2js/docs/minizork.z3
 # Output: Found 143 rooms and 87 objects
 
 # Zork I - full game
-python3 z2pdf.py ~/zorkie/zork1-final.z3
+python3 z2pdf ~/zorkie/zork1-final.z3
 # Output: Found 247 rooms and 1 objects
 
 # Enchanter
-python3 z2pdf.py ~/zorkie/enchanter-test.z3
+python3 z2pdf ~/zorkie/enchanter-test.z3
 # Output: Found 251 rooms and 0 objects
 ```
 
