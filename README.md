@@ -1,6 +1,6 @@
 # z2pdf - Z-Machine to PDF Debugging Tool
 
-A tool for extracting and visualizing debugging information from Z-machine game files (.z1 through .z8).
+A tool for extracting and visualizing debugging information from Z-machine game files (.z1 through .z8). It works best on traditional infocom games compiled by the infocom compiler.  It gets less info about the directions for moves between rooms when a game is compiled with zorkie (our zil/zilf compiler).
 
 ## Features
 

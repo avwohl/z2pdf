@@ -794,8 +794,8 @@ class PDFGenerator:
         if not rooms:
             return
 
-        # Sort rooms by position for consistent pagination
-        sorted_rooms = sorted(rooms.items(), key=lambda x: (x[1].y, x[1].x))
+        # Sort rooms by room number for consistent ordering
+        sorted_rooms = sorted(rooms.items(), key=lambda x: x[0])
 
         # Configuration for readability
         margin = 0.5 * inch
@@ -953,7 +953,12 @@ def main():
         sys.exit(1)
 
     input_file = sys.argv[1]
-    output_file = sys.argv[2] if len(sys.argv) > 2 else input_file.replace('.z', '.pdf')
+    if len(sys.argv) > 2:
+        output_file = sys.argv[2]
+    else:
+        # Default: use base filename with .pdf extension (no directory)
+        base = os.path.splitext(os.path.basename(input_file))[0]
+        output_file = base + '.pdf'
 
     if not os.path.exists(input_file):
         print(f"Error: File not found: {input_file}")
