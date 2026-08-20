@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "z2pdf"
-version = "0.1.0"
+version = "0.1.1"
 description = "Z-Machine to PDF debugging tool - extract maps, vocabulary, and objects from Infocom-style games"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -30,7 +30,7 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = [
     "reportlab>=3.5.0",
-    "z2js>=0.1.0",
+    "z2js>=0.2.3",
 ]
 
 [project.urls]
