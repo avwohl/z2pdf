@@ -40,6 +40,6 @@ The tool prints diagnostic information:
 
 If you encounter issues:
 1. Check that the input file is a valid Z-machine file
-2. Verify that z2js/zparser.py is available
+2. Verify that the z2js package is installed, version 0.2.3 or newer (`pip show z2js`)
 3. Ensure reportlab is installed
 4. Try with known-good files like minizork.z3

@@ -14,36 +14,42 @@ A tool for extracting and visualizing debugging information from Z-machine game 
 
 ### Requirements
 
-- Python 3.7+
-- reportlab library
+- Python 3.8+
+- reportlab 3.5.0 or newer
+- z2js 0.2.3 or newer, which supplies the Z-machine parser (`zparser`)
+
+pip installs both libraries as dependencies.
 
 ### Setup
 
 ```bash
-pip install reportlab
+pip install z2pdf        # from PyPI
+pip install .            # or from a checkout of this repository
 ```
 
-The tool also depends on the Z-machine parser from the z2js project at `~/z2js/zparser.py`.
+Either one puts a `z2pdf` command on the PATH. The `z2pdf` script at the top of
+the repository runs the same code without installing the package, but still
+needs reportlab and z2js installed.
 
 ## Usage
 
 Basic usage:
 
 ```bash
-python3 z2pdf <input.z3> [output.pdf]
+z2pdf <input.z3> [output.pdf]
 ```
 
 Examples:
 
 ```bash
 # Generate map for minizork
-python3 z2pdf minizork.z3
+z2pdf minizork.z3
 
 # Specify output filename
-python3 z2pdf zork1.z3 zork1-map.pdf
+z2pdf zork1.z3 zork1-map.pdf
 
 # Process any Z-machine version
-python3 z2pdf game.z5 game-map.pdf
+z2pdf game.z5 game-map.pdf
 ```
 
 ## Documentation
@@ -62,7 +68,7 @@ This is a debugging tool for Z-machine game development. Improvements to room/ex
 ## Related Projects
 
 - **zorkie** (`~/zorkie`): ZIL/ZILF compiler for Z-machine
-- **z2js** (`~/z2js`): Z-machine to JavaScript converter
+- **z2js** ([avwohl/z2js](https://github.com/avwohl/z2js)): Z-machine to JavaScript converter, and the source of the parser z2pdf uses
 
 ## License
 
